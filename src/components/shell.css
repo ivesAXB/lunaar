@@ -224,6 +224,54 @@
   margin-left: auto;
 }
 
+/* ─── Unidade exibida e alertas ────────────────────────────── */
+.base-switcher {
+  flex: none;
+  margin-left: auto;
+}
+.base-switcher + .alert-bell + .topbar__new {
+  margin-left: 0;
+}
+.base-switcher__short {
+  display: none;
+}
+.alert-bell {
+  position: relative;
+  flex: none;
+}
+.alert-bell.active {
+  background: var(--surface-hover);
+}
+.alert-bell__count {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 2px solid var(--paper);
+  border-radius: 999px;
+  background: var(--danger-solid);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+@media (max-width: 1199px) {
+  .base-switcher__long {
+    display: none;
+  }
+  .base-switcher__short {
+    display: inline;
+  }
+}
+@media (max-width: 899px) {
+  .base-switcher button {
+    padding: 0 8px;
+  }
+}
+
 /* ─── Barra inferior (celular) ─────────────────────────────── */
 .bottomnav {
   display: none;

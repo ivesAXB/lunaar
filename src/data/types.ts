@@ -19,6 +19,9 @@ export type Size = 'pequeno' | 'medio' | 'grande';
 
 export type UserRole = 'coordenacao' | 'equipe' | 'veterinaria';
 
+/** Unidade da instituição. Animais e canis pertencem a uma delas. */
+export type Base = 'ong' | 'recanto';
+
 export interface User {
   id: ID;
   name: string;
@@ -41,6 +44,7 @@ export interface Kennel {
   sector: string;
   wing: string;
   number: string;
+  base: Base;
   kind: KennelKind;
   capacity: number;
   notes?: string;
@@ -68,6 +72,7 @@ export interface Adoption {
 
 export interface Animal {
   id: ID;
+  base: Base;
   name: string;
   species: Species;
   breed: string;
@@ -108,6 +113,64 @@ export interface AnimalTreatment {
   status: TreatmentStatus;
   vet?: string;
   notes?: string;
+  /** Horários diários da medicação ("08:00"). Vazio: sem agenda de doses. */
+  times: string[];
+}
+
+/** Dose administrada de um tratamento com horários (agenda de doses). */
+export interface MedicationDose {
+  id: ID;
+  treatmentId: ID;
+  animalId: ID;
+  scheduledOn: ISODate;
+  scheduledTime: string;
+  givenAt: ISODateTime;
+  userId?: ID;
+  notes?: string;
+}
+
+export interface AnimalWeight {
+  id: ID;
+  animalId: ID;
+  measuredOn: ISODate;
+  weightKg: number;
+  notes?: string;
+  userId?: ID;
+}
+
+export type DocumentKind = 'exame' | 'receituario' | 'laudo' | 'termo' | 'foto' | 'documento';
+
+export interface AnimalDocument {
+  id: ID;
+  animalId: ID;
+  name: string;
+  kind: DocumentKind;
+  /** Supabase: caminho no bucket "documents". Demonstração: data URL. */
+  path: string;
+  mime?: string;
+  sizeKb?: number;
+  uploadedAt: ISODateTime;
+  userId?: ID;
+}
+
+export type TaskStatus = 'pendente' | 'em_andamento' | 'concluida';
+export type TaskPriority = 'baixa' | 'normal' | 'alta' | 'critica';
+export type TaskCategory = 'geral' | 'medicacao' | 'exame' | 'higiene' | 'monitoramento' | 'alta';
+
+export interface Task {
+  id: ID;
+  title: string;
+  animalId?: ID;
+  base: Base;
+  assigneeId?: ID;
+  priority: TaskPriority;
+  category: TaskCategory;
+  dueAt: ISODateTime;
+  status: TaskStatus;
+  notes?: string;
+  createdBy?: ID;
+  createdAt: ISODateTime;
+  doneAt?: ISODateTime;
 }
 
 export interface AnimalVaccine {
@@ -255,6 +318,10 @@ export interface Database {
   vaccines: AnimalVaccine[];
   healthRecords: AnimalHealthRecord[];
   events: AnimalEvent[];
+  doses: MedicationDose[];
+  weights: AnimalWeight[];
+  documents: AnimalDocument[];
+  tasks: Task[];
   clients: Client[];
   pets: ClientPet[];
   accommodations: Accommodation[];

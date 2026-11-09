@@ -4,8 +4,10 @@ import type {
   Animal,
   AnimalEvent,
   AnimalHealthRecord,
+  AnimalDocument,
   AnimalTreatment,
   AnimalVaccine,
+  AnimalWeight,
   Booking,
   BookingCheckin,
   BookingCheckout,
@@ -13,6 +15,8 @@ import type {
   ClientPet,
   Database,
   Kennel,
+  MedicationDose,
+  Task,
   User,
 } from './types';
 import { makeCpf } from '@/lib/format';
@@ -23,7 +27,7 @@ import { kennelPath } from '@/lib/kennel';
  * sempre abra com uma situação plausível (hospedagens terminando hoje,
  * vacinas vencendo, adoções recentes etc.).
  */
-export const SEED_VERSION = 6;
+export const SEED_VERSION = 7;
 
 export function createSeed(today = new Date()): Database {
   const d = (offset: number) => format(addDays(today, offset), 'yyyy-MM-dd');
@@ -40,16 +44,18 @@ export function createSeed(today = new Date()): Database {
   ];
 
   const kennels: Kennel[] = [
-    { id: 'k1', location: 'Sede Coxipó', sector: 'Cães', wing: 'A', number: '01', kind: 'canil', capacity: 4 },
-    { id: 'k2', location: 'Sede Coxipó', sector: 'Cães', wing: 'A', number: '02', kind: 'canil', capacity: 4 },
-    { id: 'k3', location: 'Sede Coxipó', sector: 'Cães', wing: 'B', number: '03', kind: 'canil', capacity: 4 },
-    { id: 'k4', location: 'Sede Coxipó', sector: 'Cães', wing: 'B', number: '04', kind: 'canil', capacity: 3, notes: 'Reservado para idosos: piso emborrachado e sombra.' },
-    { id: 'k5', location: 'Sede Coxipó', sector: 'Gatos', wing: 'C', number: '01', kind: 'gatil', capacity: 8 },
-    { id: 'k6', location: 'Sede Coxipó', sector: 'Clínico', wing: 'D', number: '01', kind: 'enfermaria', capacity: 6, notes: 'Inclui baias de isolamento para doenças contagiosas.' },
-    { id: 'k7', location: 'Lares temporários', sector: 'Famílias voluntárias', wing: 'LT', number: '01', kind: 'lar_temporario', capacity: 4 },
+    { base: 'ong', id: 'k1', location: 'Sede Coxipó', sector: 'Cães', wing: 'A', number: '01', kind: 'canil', capacity: 4 },
+    { base: 'ong', id: 'k2', location: 'Sede Coxipó', sector: 'Cães', wing: 'A', number: '02', kind: 'canil', capacity: 4 },
+    { base: 'ong', id: 'k3', location: 'Sede Coxipó', sector: 'Cães', wing: 'B', number: '03', kind: 'canil', capacity: 4 },
+    { base: 'ong', id: 'k4', location: 'Sede Coxipó', sector: 'Cães', wing: 'B', number: '04', kind: 'canil', capacity: 3, notes: 'Reservado para idosos: piso emborrachado e sombra.' },
+    { base: 'ong', id: 'k5', location: 'Sede Coxipó', sector: 'Gatos', wing: 'C', number: '01', kind: 'gatil', capacity: 8 },
+    { base: 'ong', id: 'k6', location: 'Sede Coxipó', sector: 'Clínico', wing: 'D', number: '01', kind: 'enfermaria', capacity: 6, notes: 'Inclui baias de isolamento para doenças contagiosas.' },
+    { base: 'ong', id: 'k7', location: 'Lares temporários', sector: 'Famílias voluntárias', wing: 'LT', number: '01', kind: 'lar_temporario', capacity: 4 },
+    { base: 'recanto', id: 'k8', location: 'Recanto', sector: 'Cães', wing: 'R', number: '01', kind: 'canil', capacity: 6, notes: 'Área externa com gramado.' },
+    { base: 'recanto', id: 'k9', location: 'Recanto', sector: 'Gatos', wing: 'R', number: '02', kind: 'gatil', capacity: 6 },
   ];
 
-  type A = Omit<Animal, 'updatedAt' | 'neutered'> & { neutered?: boolean };
+  type A = Omit<Animal, 'updatedAt' | 'neutered' | 'base'> & { neutered?: boolean };
   const raw: A[] = [
     {
       id: 'a01', name: 'Thor', species: 'cao', breed: 'SRD', sex: 'macho', color: 'Preto', weightKg: 24.5,
@@ -220,9 +226,14 @@ export function createSeed(today = new Date()): Database {
       adoption: { adopterName: 'Juliana Freitas', adopterPhone: '(65) 99734-1180', date: d(-135) },
     },
   ];
-  const animals: Animal[] = raw.map((a) => ({ ...a, neutered: a.neutered ?? false, updatedAt: nowIso }));
+  // Parte dos animais fica no Recanto, com canis próprios.
+  const recanto: Record<string, string | undefined> = { a10: 'k8', a12: 'k8', a16: 'k8', a18: 'k9', a19: 'k9', a26: undefined };
+  const animals: Animal[] = raw.map((a) => {
+    const inRecanto = a.id in recanto;
+    return { ...a, base: inRecanto ? 'recanto' : 'ong', kennelId: inRecanto ? recanto[a.id] : a.kennelId, neutered: a.neutered ?? false, updatedAt: nowIso };
+  });
 
-  const treatments: AnimalTreatment[] = [
+  const treatmentList: Omit<AnimalTreatment, 'times'>[] = [
     { id: 't01', animalId: 'a07', title: 'Tratamento de erliquiose', medication: 'Doxiciclina 100 mg', dosage: '1 comprimido a cada 12h', startDate: d(-16), endDate: d(12), status: 'ativo', vet: 'Dra. Camila Rezende' },
     { id: 't02', animalId: 'a08', title: 'Dermatite alérgica', medication: 'Banho com clorexidina 2%', dosage: '1x por semana', startDate: d(-30), endDate: d(30), status: 'ativo', vet: 'Dra. Camila Rezende', notes: 'Manter ração hipoalergênica.' },
     { id: 't03', animalId: 'a08', title: 'Controle de artrose', medication: 'Condroitina + glucosamina', dosage: '1 comprimido ao dia', startDate: d(-60), status: 'ativo', vet: 'Dra. Camila Rezende' },
@@ -233,7 +244,10 @@ export function createSeed(today = new Date()): Database {
     { id: 't08', animalId: 'a17', title: 'Hemograma e vermifugação de entrada', startDate: d(-1), status: 'pendente', vet: 'Dra. Camila Rezende' },
     { id: 't09', animalId: 'a14', title: 'Investigação de gastrite', medication: 'Omeprazol 10 mg', dosage: '1x ao dia em jejum', startDate: d(-2), status: 'ativo', vet: 'Dra. Camila Rezende' },
     { id: 't10', animalId: 'a11', title: 'Quarentena de entrada', startDate: d(-4), endDate: d(6), status: 'ativo', vet: 'Dra. Camila Rezende' },
-  ];
+  ];  // Horários da agenda de doses (medicações de uso diário).
+  const schedule: Record<string, string[]> = { t01: ['08:00', '20:00'], t03: ['09:00'], t06: ['12:00'], t09: ['07:00'] };
+  const treatments: AnimalTreatment[] = treatmentList.map((t) => ({ ...t, times: schedule[t.id] ?? [] }));
+
 
   const v = (id: string, animalId: string, name: string, date: number, nextDue?: number): AnimalVaccine => ({
     id, animalId, name, date: d(date), nextDue: nextDue === undefined ? undefined : d(nextDue), vet: 'Dra. Camila Rezende',
@@ -390,10 +404,60 @@ export function createSeed(today = new Date()): Database {
     }
   });
 
+
+  // ─── Agenda de doses: ontem completo, hoje só as primeiras do dia ─────
+  const doses: MedicationDose[] = [];
+  for (const t of treatments.filter((x) => x.status === 'ativo' && x.times.length)) {
+    t.times.forEach((time, i) => {
+      doses.push({ id: `ds-${t.id}-y${i}`, treatmentId: t.id, animalId: t.animalId, scheduledOn: d(-1), scheduledTime: time, givenAt: dt(-1, time), userId: 'u3' });
+      if (time <= '08:00') doses.push({ id: `ds-${t.id}-t${i}`, treatmentId: t.id, animalId: t.animalId, scheduledOn: d(0), scheduledTime: time, givenAt: dt(0, time), userId: 'u4' });
+    });
+  }
+
+  // ─── Histórico de peso: medições desde a entrada até o peso atual ─────
+  const weights: AnimalWeight[] = [];
+  // Urso (gastrite) perdeu peso: gera alerta de perda de peso.
+  const trend: Record<string, number[]> = { a14: [26.4, 25.6, 24.1, 23] };
+  for (const a of animals) {
+    if (a.weightKg == null || a.status === 'adotado') continue;
+    const span = Math.max(4, -differenceFromToday(a.intakeDate));
+    // Filhotes ganham peso rápido; adultos variam pouco.
+    const factors = a.ageApproxMonths != null && a.ageApproxMonths < 12 ? [0.6, 0.75, 0.9, 1] : [0.95, 0.97, 0.99, 1];
+    const values = trend[a.id] ?? factors.map((f) => Math.round(a.weightKg! * f * 10) / 10);
+    values.forEach((kg, i) => {
+      const offset = i === values.length - 1 ? -Math.min(Math.floor(span / 4), 6) : -span + Math.round((span * i) / values.length);
+      weights.push({ id: `w-${a.id}-${i}`, animalId: a.id, measuredOn: d(offset), weightKg: i === values.length - 1 ? a.weightKg! : kg, notes: i === 0 ? 'Peso na entrada' : undefined, userId: i % 2 ? 'u2' : 'u3' });
+    });
+  }
+
+  // ─── Documentos de exemplo (PDF gerado no navegador) ──────────────────
+  const documents: AnimalDocument[] = [
+    { id: 'doc1', animalId: 'a07', name: 'Hemograma completo.pdf', kind: 'exame', path: samplePdf('Hemograma completo - Estopinha'), mime: 'application/pdf', sizeKb: 1, uploadedAt: dt(-15, '10:20'), userId: 'u2' },
+    { id: 'doc2', animalId: 'a07', name: 'Receita doxiciclina.pdf', kind: 'receituario', path: samplePdf('Receituario - Doxiciclina 100 mg a cada 12h'), mime: 'application/pdf', sizeKb: 1, uploadedAt: dt(-16, '09:05'), userId: 'u2' },
+    { id: 'doc3', animalId: 'a22', name: 'Laudo citologia.pdf', kind: 'laudo', path: samplePdf('Laudo citologico - Tom - Esporotricose'), mime: 'application/pdf', sizeKb: 1, uploadedAt: dt(-44, '15:40'), userId: 'u2' },
+    { id: 'doc4', animalId: 'a03', name: 'Termo de reserva.pdf', kind: 'termo', path: samplePdf('Termo de reserva para adocao - Luna'), mime: 'application/pdf', sizeKb: 1, uploadedAt: dt(-3, '11:00'), userId: 'u1' },
+  ];
+
+  // ─── Tarefas da equipe ────────────────────────────────────────────────
+  const task = (id: string, title: string, extra: Partial<Task> & Pick<Task, 'dueAt'>): Task => ({
+    id, title, base: 'ong', priority: 'normal', category: 'geral', status: 'pendente', createdBy: 'u1', createdAt: dt(-2, '08:00'), ...extra,
+  });
+  const tasks: Task[] = [
+    task('tk1', 'Levar Duque para retirada de pontos', { animalId: 'a09', assigneeId: 'u2', priority: 'alta', category: 'exame', dueAt: dt(0, '14:00') }),
+    task('tk2', 'Coletar sangue para hemograma da Paçoca', { animalId: 'a17', assigneeId: 'u2', priority: 'alta', category: 'exame', dueAt: dt(0, '10:00'), status: 'em_andamento' }),
+    task('tk3', 'Pesar o Urso e registrar no prontuário', { animalId: 'a14', assigneeId: 'u3', priority: 'critica', category: 'monitoramento', dueAt: dt(-1, '17:00') }),
+    task('tk4', 'Limpeza e desinfecção da enfermaria', { assigneeId: 'u4', category: 'higiene', dueAt: dt(0, '16:00') }),
+    task('tk5', 'Banho medicamentoso do Chico', { animalId: 'a08', assigneeId: 'u3', category: 'medicacao', dueAt: dt(2, '09:00') }),
+    task('tk6', 'Confirmar mutirão de castração com a Prefeitura', { assigneeId: 'u1', priority: 'alta', dueAt: dt(1, '12:00') }),
+    task('tk7', 'Trocar areia do gatil do Recanto', { base: 'recanto', assigneeId: 'u4', category: 'higiene', dueAt: dt(0, '11:00') }),
+    task('tk8', 'Passeio e socialização do Caramelo', { animalId: 'a10', base: 'recanto', assigneeId: 'u3', priority: 'baixa', dueAt: dt(1, '08:30') }),
+    task('tk9', 'Vermifugar Thor', { animalId: 'a01', assigneeId: 'u3', category: 'medicacao', dueAt: dt(-1, '09:00'), status: 'concluida', doneAt: dt(-1, '09:40') }),
+  ];
+
   return {
     version: SEED_VERSION,
     organization: { name: 'Associação LUNAAR', city: 'Cuiabá – MT', phone: '(65) 99246-5672', pix: '(65) 99246-5672' },
-    users, kennels, animals, treatments, vaccines, healthRecords, events, clients, pets, accommodations, bookings, checkins, checkouts,
+    users, kennels, animals, treatments, vaccines, healthRecords, events, doses, weights, documents, tasks, clients, pets, accommodations, bookings, checkins, checkouts,
   };
 
   function subDaysIso(date: string, n: number) {
@@ -403,4 +467,31 @@ export function createSeed(today = new Date()): Database {
 
 function daysBetween(a: string, b: string) {
   return Math.round((new Date(`${b}T12:00:00`).getTime() - new Date(`${a}T12:00:00`).getTime()) / 86_400_000);
+}
+
+function differenceFromToday(iso: string) {
+  return Math.round((new Date(`${iso}T12:00:00`).getTime() - Date.now()) / 86_400_000);
+}
+
+/** PDF mínimo de uma página com um título, para os documentos de exemplo. */
+function samplePdf(title: string) {
+  const text = title.replace(/[()\\]/g, '');
+  const stream = `BT /F1 18 Tf 60 760 Td (${text}) Tj 0 -28 Td /F1 11 Tf (Documento de exemplo - modo demonstracao LUNAAR) Tj ET`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  objects.forEach((o, i) => {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((n) => `${String(n).padStart(10, '0')} 00000 n \n`).join('')}`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return `data:application/pdf;base64,${btoa(pdf)}`;
 }

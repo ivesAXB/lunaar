@@ -24,6 +24,9 @@ import { AgendaPage } from './pages/AgendaPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { MedicationsPage } from './pages/MedicationsPage';
+import { TasksPage } from './pages/TasksPage';
+import { AlertsPage } from './pages/AlertsPage';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { userId, ready } = useAuth();
@@ -66,6 +69,9 @@ export function App() {
               <Route path="animais/:id" element={<AnimalProfilePage />} />
               <Route path="animais/:id/editar" element={<AnimalFormPage />} />
               <Route path="saude" element={<HealthPage />} />
+              <Route path="medicamentos" element={<MedicationsPage />} />
+              <Route path="tarefas" element={<TasksPage />} />
+              <Route path="alertas" element={<AlertsPage />} />
               <Route path="hospedagem" element={<BookingListPage />} />
               <Route path="hospedagem/nova" element={<BookingNewPage />} />
               <Route path="hospedagem/:id" element={<BookingDetailPage />} />

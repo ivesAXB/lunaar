@@ -482,3 +482,20 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Central de alertas */
+.alerts-page__action {
+  margin-left: auto;
+  flex: none;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.alerts-page__new {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--danger-solid);
+  vertical-align: 2px;
+}

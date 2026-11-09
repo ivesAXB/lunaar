@@ -1,5 +1,6 @@
-import type { Animal, AnimalVaccine, Booking, BookingStatus, Client, ClientPet, Database, ID } from './types';
-import { daysFromToday, nightsBetween, normalize, todayIso } from '@/lib/format';
+import type { Animal, AnimalTreatment, AnimalVaccine, AnimalWeight, Booking, BookingStatus, Client, ClientPet, Database, ID, MedicationDose, Task } from './types';
+import type { DoseStatus } from '@/lib/labels';
+import { daysFromToday, fmtKg, fmtTime, isoDate, nightsBetween, normalize, toDate, todayIso } from '@/lib/format';
 
 export const OPEN_BOOKING: BookingStatus[] = ['reserva', 'confirmada', 'hospedado'];
 
@@ -85,6 +86,73 @@ export function missingInfo(a: Animal) {
   return missing;
 }
 
+// ─── Agenda de doses ─────────────────────────────────────────
+
+export interface DoseSlot {
+  key: string;
+  date: string;
+  time: string;
+  treatment: AnimalTreatment;
+  animal: Animal;
+  given?: MedicationDose;
+  status: DoseStatus;
+}
+
+const nowHHMM = () => new Date().toTimeString().slice(0, 5);
+
+/** Tratamentos com horário que valem numa data (em andamento e dentro do período). */
+export const scheduledOn = (db: Database, date: string) =>
+  db.treatments.filter((t) => t.status === 'ativo' && t.times.length > 0 && t.startDate <= date && (!t.endDate || t.endDate >= date));
+
+/** Todas as doses previstas para um dia, com a situação de cada uma. */
+export function doseSlots(db: Database, date: string): DoseSlot[] {
+  const today = todayIso();
+  const now = nowHHMM();
+  const care = new Map(inCare(db).map((a) => [a.id, a]));
+  const given = new Map(db.doses.filter((d) => d.scheduledOn === date).map((d) => [`${d.treatmentId}|${d.scheduledTime}`, d]));
+  const slots: DoseSlot[] = [];
+  for (const t of scheduledOn(db, date)) {
+    const animal = care.get(t.animalId);
+    if (!animal) continue;
+    for (const time of t.times) {
+      const g = given.get(`${t.id}|${time}`);
+      const late = date < today || (date === today && time < now);
+      slots.push({ key: `${t.id}|${date}|${time}`, date, time, treatment: t, animal, given: g, status: g ? 'administrada' : late ? 'atrasada' : 'pendente' });
+    }
+  }
+  return slots.sort((a, b) => a.time.localeCompare(b.time) || a.animal.name.localeCompare(b.animal.name));
+}
+
+// ─── Peso ────────────────────────────────────────────────────
+
+export const weightsOf = (db: Database, animalId: ID) =>
+  db.weights.filter((w) => w.animalId === animalId).sort((a, b) => a.measuredOn.localeCompare(b.measuredOn));
+
+/** Perda de peso: última medição comparada ao maior peso dos 30 dias anteriores. */
+export function weightLoss(list: AnimalWeight[]) {
+  const last = list[list.length - 1];
+  if (!last) return null;
+  const from = new Date(`${last.measuredOn}T12:00:00`);
+  from.setDate(from.getDate() - 30);
+  const fromIso = from.toISOString().slice(0, 10);
+  const window = list.filter((w) => w !== last && w.measuredOn >= fromIso);
+  if (!window.length) return null;
+  const peak = window.reduce((m, w) => (w.weightKg > m.weightKg ? w : m));
+  const pct = (peak.weightKg - last.weightKg) / peak.weightKg;
+  return pct > 0 ? { pct, from: peak, to: last } : null;
+}
+
+export const WEIGHT_LOSS_ALERT = 0.1;
+
+// ─── Tarefas ─────────────────────────────────────────────────
+
+// dueAt pode vir com fuso (Supabase: "…+00:00") ou sem (dados de exemplo, hora local):
+// comparar como data, nunca como texto, e tirar o dia no fuso local.
+export const isTaskOverdue = (t: Task) => t.status !== 'concluida' && toDate(t.dueAt).getTime() < Date.now();
+
+/** Dia (yyyy-MM-dd) de um horário no fuso local. */
+export const localDay = (iso: string) => isoDate(toDate(iso));
+
 export type AlertSeverity = 'critical' | 'warning' | 'info';
 
 export interface Alert {
@@ -163,6 +231,59 @@ export function buildAlerts(db: Database): Alert[] {
       })),
     });
 
+  const careIds = new Set(care.map((a) => a.id));
+  const lateDoses = doseSlots(db, today).filter((s) => s.status === 'atrasada');
+  if (lateDoses.length)
+    alerts.push({
+      id: 'doses',
+      severity: 'critical',
+      title: `${lateDoses.length === 1 ? '1 dose de medicação está atrasada' : `${lateDoses.length} doses de medicação estão atrasadas`}`,
+      items: lateDoses.map((s) => ({
+        id: s.key,
+        label: s.animal.name,
+        detail: `${s.time} · ${s.treatment.medication ?? s.treatment.title}${s.treatment.dosage ? ` · ${s.treatment.dosage}` : ''}`,
+        href: '/medicamentos',
+        photo: s.animal.photo,
+      })),
+      action: { label: 'Abrir agenda de doses', href: '/medicamentos' },
+    });
+
+  const lateTasks = db.tasks.filter(isTaskOverdue).sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+  if (lateTasks.length)
+    alerts.push({
+      id: 'tasks',
+      severity: 'warning',
+      title: `${lateTasks.length === 1 ? '1 tarefa passou' : `${lateTasks.length} tarefas passaram`} do prazo`,
+      items: lateTasks.map((t) => {
+        const a = db.animals.find((x) => x.id === t.animalId);
+        return {
+          id: t.id,
+          label: t.title,
+          detail: `Prazo ${daysFromToday(localDay(t.dueAt)) === 0 ? 'hoje' : `em ${localDay(t.dueAt).slice(8, 10)}/${localDay(t.dueAt).slice(5, 7)}`} às ${fmtTime(t.dueAt)}${a ? ` · ${a.name}` : ''}${t.assigneeId ? ` · ${userById(db, t.assigneeId)?.name ?? ''}` : ''}`,
+          href: '/tarefas',
+          photo: a?.photo,
+        };
+      }),
+      action: { label: 'Abrir tarefas', href: '/tarefas' },
+    });
+
+  const losing = care
+    .map((a) => ({ a, loss: weightLoss(weightsOf(db, a.id)) }))
+    .filter((x) => x.loss && x.loss.pct >= WEIGHT_LOSS_ALERT && careIds.has(x.a.id));
+  if (losing.length)
+    alerts.push({
+      id: 'weight',
+      severity: 'warning',
+      title: `${losing.length === 1 ? '1 animal perdeu' : `${losing.length} animais perderam`} 10% ou mais do peso em 30 dias`,
+      items: losing.map(({ a, loss }) => ({
+        id: a.id,
+        label: a.name,
+        detail: `${fmtKg(loss!.from.weightKg)} → ${fmtKg(loss!.to.weightKg)} (−${Math.round(loss!.pct * 100)}%)`,
+        href: `/animais/${a.id}?aba=peso`,
+        photo: a.photo,
+      })),
+    });
+
   const unconfirmed = views.filter((b) => b.status === 'reserva' && daysFromToday(b.checkIn) <= 3);
   if (unconfirmed.length)
     alerts.push({
@@ -181,5 +302,6 @@ export function buildAlerts(db: Database): Alert[] {
       items: incomplete.map(({ a, missing }) => ({ id: a.id, label: a.name, detail: `Falta: ${missing.join(', ')}`, href: `/animais/${a.id}/editar`, photo: a.photo })),
     });
 
-  return alerts;
+  const rank: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 };
+  return alerts.sort((x, y) => rank[x.severity] - rank[y.severity]);
 }

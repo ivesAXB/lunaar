@@ -93,6 +93,10 @@ export const TABLES: TableSpec[] = [
     }),
   },
   simple('treatments', 'animal_treatments'),
+  simple('doses', 'medication_doses', { timestamps: ['givenAt'] }),
+  simple('weights', 'animal_weights', { numeric: ['weightKg'] }),
+  simple('documents', 'animal_documents', { timestamps: ['uploadedAt'] }),
+  simple('tasks', 'tasks', { timestamps: ['dueAt', 'createdAt', 'doneAt'] }),
   simple('vaccines', 'animal_vaccines', { rename: { date: 'applied_on' } }),
   simple('healthRecords', 'animal_health_records', { rename: { date: 'record_date' } }),
   simple('events', 'animal_events', { timestamps: ['at'] }),
@@ -108,6 +112,11 @@ clientSpec.fromRow = (r) => {
   const { street, number, complement, district, city, state, zip, ...rest } = r;
   return { ...plainFromRow(rest), address: plainFromRow({ street, number, complement, district, city, state, zip }) };
 };
+
+// Tratamentos gravados antes da agenda de doses não têm horários.
+const treatmentSpec = TABLES.find((t) => t.key === 'treatments')!;
+const treatmentFromRow = treatmentSpec.fromRow;
+treatmentSpec.fromRow = (r) => ({ times: [], ...treatmentFromRow(r) });
 
 function db() {
   if (!supabase) throw new Error('Supabase não configurado.');
@@ -195,4 +204,29 @@ export async function createStaffUser(input: { name: string; email: string; role
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? 'Não foi possível criar o acesso.');
   return body.profile as { id: string; name: string; email: string; role: string; active: boolean };
+}
+
+// ─── Documentos (bucket privado "documents") ───────────────────
+
+const safeName = (name: string) =>
+  name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(-80);
+
+/** Envia o arquivo e devolve o caminho dentro do bucket. */
+export async function uploadDocumentFile(animalId: string, id: string, file: File) {
+  const path = `animais/${animalId}/${id}-${safeName(file.name)}`;
+  const { error } = await db().storage.from('documents').upload(path, file, { contentType: file.type || undefined, upsert: false });
+  if (error) throw new Error(`Não foi possível enviar o arquivo: ${error.message}`);
+  return path;
+}
+
+/** Link temporário (5 min) para abrir ou baixar um documento privado. */
+export async function documentUrl(path: string, download?: string) {
+  const { data, error } = await db().storage.from('documents').createSignedUrl(path, 300, download ? { download } : undefined);
+  if (error || !data) throw new Error(`Não foi possível abrir o documento: ${error?.message ?? 'link indisponível'}`);
+  return data.signedUrl;
+}
+
+export async function removeDocumentFile(path: string) {
+  const { error } = await db().storage.from('documents').remove([path]);
+  if (error) throw new Error(`Não foi possível apagar o arquivo: ${error.message}`);
 }

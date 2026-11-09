@@ -7,7 +7,10 @@ import type {
   AnimalHealthRecord,
   AnimalStatus,
   AnimalTreatment,
+  AnimalDocument,
   AnimalVaccine,
+  AnimalWeight,
+  Base,
   Booking,
   BookingCheckin,
   BookingCheckout,
@@ -17,6 +20,8 @@ import type {
   ID,
   Kennel,
   Organization,
+  Task,
+  TaskStatus,
   TreatmentStatus,
   User,
 } from './types';
@@ -24,7 +29,8 @@ import { ANIMAL_STATUS } from '@/lib/labels';
 import { getCurrentUserId } from './session';
 import { kennelPath } from '@/lib/kennel';
 import { isRemote } from '@/lib/supabase';
-import { createStaffUser, loadRemote, syncRemote } from './remote';
+import { todayIso } from '@/lib/format';
+import { createStaffUser, documentUrl, loadRemote, removeDocumentFile, syncRemote, uploadDocumentFile } from './remote';
 
 /**
  * Camada de dados.
@@ -69,6 +75,7 @@ const EMPTY: Database = {
   version: SEED_VERSION,
   organization: { name: 'Associação LUNAAR', city: '', phone: '', pix: '' },
   users: [], kennels: [], animals: [], treatments: [], vaccines: [], healthRecords: [], events: [],
+  doses: [], weights: [], documents: [], tasks: [],
   clients: [], pets: [], accommodations: [], bookings: [], checkins: [], checkouts: [],
 };
 
@@ -104,6 +111,11 @@ function demoForRemote(userId: string): Omit<Database, 'users' | 'version'> {
     vaccines: remap(seed.vaccines, ['id', 'animalId']),
     healthRecords: remap(seed.healthRecords, ['id', 'animalId']),
     events: fix(remap(seed.events, ['id', 'animalId']), ['userId']),
+    doses: fix(remap(seed.doses, ['id', 'treatmentId', 'animalId']), ['userId']),
+    weights: fix(remap(seed.weights, ['id', 'animalId']), ['userId']),
+    // Documentos de exemplo não são enviados: o arquivo precisa ir para o Storage.
+    documents: [],
+    tasks: fix(remap(seed.tasks, ['id', 'animalId']), ['assigneeId', 'createdBy']),
     bookings: remap(seed.bookings, ['id', 'petId']),
     checkins: fix(remap(seed.checkins, ['bookingId']), ['userId']),
     checkouts: fix(remap(seed.checkouts, ['bookingId']), ['userId']),
@@ -121,10 +133,56 @@ export interface AnimalInput extends Omit<Animal, 'id' | 'updatedAt'> {
   vaccines?: VaccineDraft[];
 }
 
+const DEMO_FILE_LIMIT = 2 * 1024 * 1024;
+
+const readAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+    reader.readAsDataURL(file);
+  });
+
+/** Abre um documento numa nova aba (Supabase: link temporário; demonstração: arquivo do navegador). */
+export async function openDocument(doc: AnimalDocument, download = false) {
+  // A aba é aberta já no clique para o navegador não bloquear o pop-up.
+  const tab = download ? null : window.open('', '_blank');
+  try {
+    let url: string;
+    if (isRemote) url = await documentUrl(doc.path, download ? doc.name : undefined);
+    else url = URL.createObjectURL(await (await fetch(doc.path)).blob());
+    if (download) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.name;
+      a.click();
+    } else if (tab) tab.location.href = url;
+    else window.location.href = url;
+  } catch (err) {
+    tab?.close();
+    throw err;
+  }
+}
+
 function useActions(mutate: Mutate, currentUserId: () => ID | undefined) {
   return useMemo(() => {
     const logEvent = (db: Database, animalId: ID, type: Database['events'][number]['type'], text: string) => {
       db.events.push({ id: uid('e'), animalId, at: new Date().toISOString(), type, text, userId: currentUserId() });
+    };
+    /** Novo peso no cadastro vira um ponto do histórico de peso. */
+    const recordWeight = (db: Database, animalId: ID, weightKg: number | undefined, measuredOn = todayIso(), notes?: string) => {
+      if (weightKg == null) return;
+      const sameDay = db.weights.find((w) => w.animalId === animalId && w.measuredOn === measuredOn);
+      if (sameDay) Object.assign(sameDay, { weightKg, notes: notes ?? sameDay.notes, userId: currentUserId() });
+      else db.weights.push({ id: uid('w'), animalId, measuredOn, weightKg, notes, userId: currentUserId() });
+    };
+    /** O peso do cadastro acompanha a medição mais recente. */
+    const syncAnimalWeight = (db: Database, animalId: ID) => {
+      const a = db.animals.find((x) => x.id === animalId);
+      if (!a) return;
+      const last = db.weights.filter((w) => w.animalId === animalId).sort((x, y) => y.measuredOn.localeCompare(x.measuredOn))[0];
+      a.weightKg = last?.weightKg;
+      a.updatedAt = new Date().toISOString();
     };
 
     return {
@@ -143,12 +201,15 @@ function useActions(mutate: Mutate, currentUserId: () => ID | undefined) {
               const k = db.kennels.find((x) => x.id === saved.kennelId);
               logEvent(db, saved.id, 'canil', k ? `Transferido para ${kennelPath(k)}` : 'Removido do canil');
             }
+            if (prev.base !== saved.base) logEvent(db, saved.id, 'canil', `Transferido para ${saved.base === 'recanto' ? 'o Recanto' : 'a ONG'}`);
             db.animals[idx] = saved;
+            if (prev.weightKg !== saved.weightKg) recordWeight(db, saved.id, saved.weightKg);
           } else {
             saved = { ...input, id: uid('a'), updatedAt: now };
             db.animals.push(saved);
             const k = db.kennels.find((x) => x.id === saved.kennelId);
-            logEvent(db, saved.id, 'entrada', `Entrada na ONG${k ? ` · alocado em ${kennelPath(k)}` : ''}`);
+            logEvent(db, saved.id, 'entrada', `Entrada ${saved.base === 'recanto' ? 'no Recanto' : 'na ONG'}${k ? ` · alocado em ${kennelPath(k)}` : ''}`);
+            recordWeight(db, saved.id, saved.weightKg, saved.intakeDate, 'Peso na entrada');
           }
 
           if (vaccines) {
@@ -173,6 +234,10 @@ function useActions(mutate: Mutate, currentUserId: () => ID | undefined) {
           db.vaccines = db.vaccines.filter((v) => v.animalId !== id);
           db.healthRecords = db.healthRecords.filter((h) => h.animalId !== id);
           db.events = db.events.filter((e) => e.animalId !== id);
+          db.doses = db.doses.filter((d) => d.animalId !== id);
+          db.weights = db.weights.filter((w) => w.animalId !== id);
+          db.documents = db.documents.filter((d) => d.animalId !== id);
+          db.tasks = db.tasks.filter((t) => t.animalId !== id);
         }),
 
       setAnimalStatus: (id: ID, status: AnimalStatus) =>
@@ -219,7 +284,94 @@ function useActions(mutate: Mutate, currentUserId: () => ID | undefined) {
           if (status === 'concluido') logEvent(db, t.animalId, 'saude', `Tratamento concluído: ${t.title}`);
         }),
 
-      deleteTreatment: (id: ID) => mutate((db) => void (db.treatments = db.treatments.filter((t) => t.id !== id))),
+      deleteTreatment: (id: ID) =>
+        mutate((db) => {
+          db.treatments = db.treatments.filter((t) => t.id !== id);
+          db.doses = db.doses.filter((d) => d.treatmentId !== id);
+        }),
+
+      // ─── Agenda de doses ──────────────────────────────────
+      /** Marca (ou desmarca) uma dose como administrada. */
+      toggleDose: (treatmentId: ID, scheduledOn: string, scheduledTime: string) =>
+        mutate((db) => {
+          const t = db.treatments.find((x) => x.id === treatmentId);
+          if (!t) throw new Error('Tratamento não encontrado.');
+          const existing = db.doses.find((d) => d.treatmentId === treatmentId && d.scheduledOn === scheduledOn && d.scheduledTime === scheduledTime);
+          if (existing) {
+            db.doses = db.doses.filter((d) => d.id !== existing.id);
+            return false;
+          }
+          db.doses.push({ id: uid('d'), treatmentId, animalId: t.animalId, scheduledOn, scheduledTime, givenAt: new Date().toISOString(), userId: currentUserId() });
+          return true;
+        }),
+
+      // ─── Peso ─────────────────────────────────────────────
+      addWeight: (w: Omit<AnimalWeight, 'id' | 'userId'>) =>
+        mutate((db) => {
+          recordWeight(db, w.animalId, w.weightKg, w.measuredOn, w.notes);
+          syncAnimalWeight(db, w.animalId);
+        }),
+
+      deleteWeight: (id: ID) =>
+        mutate((db) => {
+          const w = db.weights.find((x) => x.id === id);
+          db.weights = db.weights.filter((x) => x.id !== id);
+          if (w) syncAnimalWeight(db, w.animalId);
+        }),
+
+      // ─── Documentos ───────────────────────────────────────
+      addDocument: async (input: { animalId: ID; file: File; name: string; kind: AnimalDocument['kind'] }) => {
+        const id = uid('doc');
+        let path: string;
+        if (isRemote) path = await uploadDocumentFile(input.animalId, id, input.file);
+        else {
+          if (input.file.size > DEMO_FILE_LIMIT) throw new Error('No modo demonstração os arquivos ficam no navegador: use arquivos de até 2 MB.');
+          path = await readAsDataUrl(input.file);
+        }
+        return mutate((db) => {
+          db.documents.push({
+            id,
+            animalId: input.animalId,
+            name: input.name,
+            kind: input.kind,
+            path,
+            mime: input.file.type || undefined,
+            sizeKb: Math.max(1, Math.round(input.file.size / 1024)),
+            uploadedAt: new Date().toISOString(),
+            userId: currentUserId(),
+          });
+        });
+      },
+
+      deleteDocument: async (doc: AnimalDocument) => {
+        await mutate((db) => void (db.documents = db.documents.filter((d) => d.id !== doc.id)));
+        if (isRemote) await removeDocumentFile(doc.path).catch(() => undefined);
+      },
+
+      // ─── Tarefas ──────────────────────────────────────────
+      saveTask: (t: Omit<Task, 'id' | 'createdAt' | 'createdBy'> & { id?: ID }) =>
+        mutate((db) => {
+          if (t.id) {
+            const idx = db.tasks.findIndex((x) => x.id === t.id);
+            if (idx < 0) throw new Error('Tarefa não encontrada.');
+            db.tasks[idx] = { ...db.tasks[idx], ...t } as Task;
+            return db.tasks[idx];
+          }
+          const created: Task = { ...t, id: uid('task'), createdAt: new Date().toISOString(), createdBy: currentUserId() };
+          db.tasks.push(created);
+          return created;
+        }),
+
+      setTaskStatus: (id: ID, status: TaskStatus) =>
+        mutate((db) => {
+          const t = db.tasks.find((x) => x.id === id);
+          if (!t) return;
+          t.status = status;
+          t.doneAt = status === 'concluida' ? new Date().toISOString() : undefined;
+          if (status === 'concluida' && t.animalId) logEvent(db, t.animalId, 'nota', `Tarefa concluída: ${t.title}`);
+        }),
+
+      deleteTask: (id: ID) => mutate((db) => void (db.tasks = db.tasks.filter((t) => t.id !== id))),
 
       addVaccine: (v: Omit<AnimalVaccine, 'id'>) =>
         mutate((db) => {
@@ -369,11 +521,53 @@ function useActions(mutate: Mutate, currentUserId: () => ID | undefined) {
 
 export type Actions = ReturnType<typeof useActions>;
 
+/** Unidade exibida: cada uma vê só os próprios animais e canis. "todas" junta as duas. */
+export type BaseFilter = Base | 'todas';
+const BASE_KEY = 'lunaar.base';
+
+function readBase(): BaseFilter {
+  try {
+    const v = localStorage.getItem(BASE_KEY);
+    if (v === 'ong' || v === 'recanto' || v === 'todas') return v;
+  } catch {
+    /* sem armazenamento */
+  }
+  return 'ong';
+}
+
+/**
+ * Recorte do banco pela unidade escolhida. As telas leem este recorte;
+ * as ações continuam gravando no banco completo.
+ */
+function viewForBase(db: Database, base: BaseFilter): Database {
+  if (base === 'todas') return db;
+  const animals = db.animals.filter((a) => a.base === base);
+  const ids = new Set(animals.map((a) => a.id));
+  const ofAnimal = <T extends { animalId: ID }>(list: T[]) => list.filter((x) => ids.has(x.animalId));
+  return {
+    ...db,
+    animals,
+    kennels: db.kennels.filter((k) => k.base === base),
+    treatments: ofAnimal(db.treatments),
+    vaccines: ofAnimal(db.vaccines),
+    healthRecords: ofAnimal(db.healthRecords),
+    events: ofAnimal(db.events),
+    doses: ofAnimal(db.doses),
+    weights: ofAnimal(db.weights),
+    documents: ofAnimal(db.documents),
+    tasks: db.tasks.filter((t) => (t.animalId ? ids.has(t.animalId) : t.base === base)),
+  };
+}
+
 interface DataContextValue {
   db: Database;
   ready: boolean;
   actions: Actions;
   reload: () => Promise<void>;
+  base: BaseFilter;
+  setBase: (b: BaseFilter) => void;
+  /** Banco completo, sem o recorte da unidade (ex.: escolher canil de outra unidade). */
+  all: Database;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -382,6 +576,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<Database>(() => (isRemote ? EMPTY : loadDb()));
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [base, setBaseState] = useState<BaseFilter>(readBase);
+  const setBase = useCallback((b: BaseFilter) => {
+    setBaseState(b);
+    try {
+      localStorage.setItem(BASE_KEY, b);
+    } catch {
+      /* sem armazenamento: vale só nesta sessão */
+    }
+  }, []);
   const dbRef = useRef(db);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const lastLoad = useRef(0);
@@ -446,7 +649,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const currentUserId = useCallback(() => getCurrentUserId(), []);
   const actions = useActions(mutate, currentUserId);
 
-  const value = useMemo(() => ({ db, ready, actions, reload }), [db, ready, actions, reload]);
+  const view = useMemo(() => viewForBase(db, base), [db, base]);
+  const value = useMemo(() => ({ db: view, all: db, ready, actions, reload, base, setBase }), [view, db, ready, actions, reload, base, setBase]);
 
   if (loadError && !db.users.length) {
     return (

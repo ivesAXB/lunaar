@@ -4,6 +4,7 @@ import {
   Check,
   CheckCircle2,
   Circle,
+  Clock,
   FilePlus2,
   HeartHandshake,
   MoreHorizontal,
@@ -16,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useData } from '@/data/store';
 import { kennelById, latestDoses, missingInfo, userById, vaccineDue } from '@/data/selectors';
-import type { Animal, Kennel } from '@/data/types';
+import type { Animal, AnimalTreatment, Kennel } from '@/data/types';
 import { useToast } from '@/components/toast';
 import {
   AnimalStatusTag,
@@ -32,15 +33,18 @@ import {
   Tag,
 } from '@/components/ui';
 import { ageInMonths, daysFromToday, fmtAge, fmtDate, fmtDateTime, fmtKg, fmtRelativeDay, plural, whatsappLink } from '@/lib/format';
-import { EVENT_TYPE, HEALTH_RECORD, ORIGIN, SEX, SIZE, SPECIES, TREATMENT_STATUS } from '@/lib/labels';
+import { BASE, EVENT_TYPE, HEALTH_RECORD, ORIGIN, SEX, SIZE, SPECIES, TREATMENT_STATUS } from '@/lib/labels';
 import { kennelName, kennelShort, kennelTag } from '@/lib/kennel';
 import { AdoptionDialog, RecordDialog, StatusDialog, TreatmentDialog, VaccineDialog } from './AnimalDialogs';
 import { NotFoundPage } from '../NotFoundPage';
+import { DocumentsTab, WeightTab } from './WeightAndDocs';
 import './profile.css';
 
 const TABS = [
   { key: 'geral', label: 'Geral' },
   { key: 'saude', label: 'Saúde' },
+  { key: 'peso', label: 'Peso' },
+  { key: 'documentos', label: 'Documentos' },
   { key: 'historico', label: 'Histórico' },
   { key: 'adocao', label: 'Adoção' },
 ] as const;
@@ -54,6 +58,7 @@ export function AnimalProfilePage() {
   const navigate = useNavigate();
   const toast = useToast();
   const [dialog, setDialog] = useState<DialogKey>(null);
+  const [editTreatment, setEditTreatment] = useState<AnimalTreatment | undefined>();
 
   const animal = db.animals.find((a) => a.id === id);
   if (!animal) return ready ? <NotFoundPage what="Animal" back="/animais" /> : <ProfileSkeleton />;
@@ -67,7 +72,8 @@ export function AnimalProfilePage() {
   const openTreatments = treatments.filter((t) => t.status !== 'concluido');
   const dueVaccines = vaccineDue(db, animal.id);
   const missing = missingInfo(animal);
-  const close = () => setDialog(null);
+  const close = () => (setDialog(null), setEditTreatment(undefined));
+  const docCount = db.documents.filter((d) => d.animalId === animal.id).length;
 
   const facts: [string, ReactNode][] = [
     ['Espécie', SPECIES[animal.species]],
@@ -102,7 +108,7 @@ export function AnimalProfilePage() {
           <header className="profile__header">
             <div>
               <p className="profile__kicker">
-                {SPECIES[animal.species]} · {animal.breed}
+                {SPECIES[animal.species]} · {animal.breed} · <span className="profile__base">{BASE[animal.base]}</span>
               </p>
               <h1 className="profile__name" id="page-title" tabIndex={-1}>
                 {animal.name}
@@ -166,6 +172,7 @@ export function AnimalProfilePage() {
               >
                 {t.label}
                 {t.key === 'saude' && openTreatments.length + dueVaccines.length > 0 && <span className="count">{openTreatments.length + dueVaccines.length}</span>}
+                {t.key === 'documentos' && docCount > 0 && <span className="count">{docCount}</span>}
               </button>
             ))}
           </nav>
@@ -174,7 +181,9 @@ export function AnimalProfilePage() {
             {tab === 'geral' && (
               <GeneralTab animal={animal} missing={missing} kennel={kennel} responsible={responsible?.name} openTreatments={openTreatments.length} dueVaccines={dueVaccines.length} onTab={(k) => setParams({ aba: k }, { replace: true })} />
             )}
-            {tab === 'saude' && <HealthTab animal={animal} onDialog={setDialog} />}
+            {tab === 'saude' && <HealthTab animal={animal} onDialog={setDialog} onEditTreatment={(t) => (setEditTreatment(t), setDialog('treatment'))} />}
+            {tab === 'peso' && <WeightTab animal={animal} />}
+            {tab === 'documentos' && <DocumentsTab animal={animal} />}
             {tab === 'historico' && <HistoryTab animal={animal} />}
             {tab === 'adocao' && <AdoptionTab animal={animal} missing={missing} openTreatments={openTreatments.length} onAdopt={() => setDialog('adoption')} />}
           </section>
@@ -182,7 +191,7 @@ export function AnimalProfilePage() {
       </div>
 
       {dialog === 'status' && <StatusDialog open onClose={close} animal={animal} />}
-      {dialog === 'treatment' && <TreatmentDialog open onClose={close} animal={animal} />}
+      {dialog === 'treatment' && <TreatmentDialog open onClose={close} animal={animal} treatment={editTreatment} />}
       {dialog === 'vaccine' && <VaccineDialog open onClose={close} animal={animal} />}
       {dialog === 'record' && <RecordDialog open onClose={close} animal={animal} />}
       {dialog === 'adoption' && <AdoptionDialog open onClose={close} animal={animal} />}
@@ -300,7 +309,7 @@ function KV({ label, children }: { label: string; children?: ReactNode }) {
   );
 }
 
-function HealthTab({ animal, onDialog }: { animal: Animal; onDialog: (d: DialogKey) => void }) {
+function HealthTab({ animal, onDialog, onEditTreatment }: { animal: Animal; onDialog: (d: DialogKey) => void; onEditTreatment: (t: AnimalTreatment) => void }) {
   const { db, actions } = useData();
   const toast = useToast();
   const treatments = db.treatments.filter((t) => t.animalId === animal.id).sort((a, b) => (a.status === 'concluido' ? 1 : 0) - (b.status === 'concluido' ? 1 : 0) || b.startDate.localeCompare(a.startDate));
@@ -361,6 +370,17 @@ function HealthTab({ animal, onDialog }: { animal: Animal; onDialog: (d: DialogK
                       {t.dosage}
                     </p>
                   )}
+                  {t.times.length > 0 && (
+                    <p className="record__times tnum">
+                      <Clock aria-hidden />
+                      {t.times.join(' · ')}
+                      {t.status === 'ativo' && (
+                        <Link to="/medicamentos" className="link">
+                          Agenda de doses
+                        </Link>
+                      )}
+                    </p>
+                  )}
                   <p className="record__meta">
                     {t.status === 'pendente' ? `Previsto para ${fmtDate(t.startDate)}` : `Desde ${fmtDate(t.startDate)}`}
                     {t.endDate && ` · até ${fmtDate(t.endDate)}`}
@@ -370,6 +390,7 @@ function HealthTab({ animal, onDialog }: { animal: Animal; onDialog: (d: DialogK
                 </div>
                 {t.status !== 'concluido' && (
                   <div className="record__actions">
+                    <Button size="sm" variant="ghost" iconOnly icon={<Pencil aria-hidden />} aria-label={`Editar ${t.title}`} title="Editar (horários das doses, período…)" onClick={() => onEditTreatment(t)} />
                     {t.status === 'pendente' && (
                       <Button size="sm" onClick={() => setStatus(t.id, 'ativo')} loading={busyId === t.id}>
                         Iniciar

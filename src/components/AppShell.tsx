@@ -3,6 +3,9 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   BarChart3,
   BedDouble,
+  Bell,
+  ListChecks,
+  Pill,
   CalendarDays,
   Gauge,
   LogOut,
@@ -17,8 +20,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/data/session';
 import { useData, useMe } from '@/data/store';
-import { inCare } from '@/data/selectors';
-import { ROLE } from '@/lib/labels';
+import { buildAlerts, doseSlots, inCare, isTaskOverdue } from '@/data/selectors';
+import { BASE, ROLE } from '@/lib/labels';
+import { todayIso } from '@/lib/format';
+import { useSeenAlerts } from '@/lib/seenAlerts';
+import { BaseSwitcher } from './BaseSwitcher';
+import { AlertBell } from './AlertBell';
 import { Logo } from './Logo';
 import { Avatar, Dialog } from './ui';
 import { GlobalSearch } from './GlobalSearch';
@@ -34,7 +41,7 @@ interface NavItem {
 
 export function AppShell() {
   const { logout } = useAuth();
-  const { db, ready } = useData();
+  const { db, ready, base } = useData();
   const user = useMe();
   const location = useLocation();
   const navigate = useNavigate();
@@ -44,19 +51,25 @@ export function AppShell() {
   const firstRender = useRef(true);
 
   const hosted = db.bookings.filter((b) => b.status === 'hospedado').length;
+  const pendingDoses = ready ? doseSlots(db, todayIso()).filter((d) => d.status !== 'administrada').length : 0;
+  const lateTasks = db.tasks.filter(isTaskOverdue).length;
+  const { unseen } = useSeenAlerts(ready ? buildAlerts(db) : []);
 
   const groups: { label?: string; items: NavItem[] }[] = [
     {
       items: [
         { to: '/', label: 'Painel', icon: Gauge, end: true },
         { to: '/agenda', label: 'Agenda', icon: CalendarDays },
+        { to: '/alertas', label: 'Alertas', icon: Bell, count: unseen },
+        { to: '/tarefas', label: 'Tarefas', icon: ListChecks, count: lateTasks },
       ],
     },
     {
-      label: 'Abrigo',
+      label: base === 'todas' ? 'Abrigo' : `Abrigo · ${BASE[base]}`,
       items: [
         { to: '/animais', label: 'Animais', icon: PawPrint, count: inCare(db).length },
         { to: '/saude', label: 'Saúde', icon: Stethoscope },
+        { to: '/medicamentos', label: 'Medicamentos', icon: Pill, count: pendingDoses },
       ],
     },
     {
@@ -114,7 +127,8 @@ export function AppShell() {
   }
 
   const newItems = [
-    { to: '/animais/novo', label: 'Animal da ONG', hint: 'Cadastrar entrada no abrigo', icon: PawPrint },
+    { to: '/animais/novo', label: 'Animal', hint: 'Cadastrar entrada na ONG ou no Recanto', icon: PawPrint },
+    { to: '/tarefas?nova=1', label: 'Tarefa', hint: 'Atribuir algo à equipe', icon: ListChecks },
     { to: '/hospedagem/nova', label: 'Hospedagem', hint: 'Reservar vaga no hotelzinho', icon: BedDouble },
     { to: '/clientes/novo', label: 'Cliente', hint: 'Tutor que usa o hotelzinho', icon: Users },
   ];
@@ -172,6 +186,8 @@ export function AppShell() {
           <button type="button" className="btn btn--ghost btn--icon topbar__search-icon" onClick={() => setSearchOpen(true)} aria-label="Buscar">
             <Search aria-hidden />
           </button>
+          <BaseSwitcher />
+          <AlertBell />
           <button type="button" className="btn btn--primary topbar__new" onClick={() => setNewOpen(true)} aria-haspopup="dialog" aria-label="Novo cadastro">
             <Plus aria-hidden />
             <span>Novo</span>
@@ -228,6 +244,9 @@ export function AppShell() {
       <Dialog open={moreOpen} onClose={() => setMoreOpen(false)} title="Mais opções">
         <ul className="choice-list">
           {[
+            { to: '/medicamentos', label: 'Medicamentos', icon: Pill },
+            { to: '/tarefas', label: 'Tarefas', icon: ListChecks },
+            { to: '/alertas', label: 'Alertas', icon: Bell },
             { to: '/clientes', label: 'Clientes e pets', icon: Users },
             { to: '/saude', label: 'Saúde dos animais', icon: Stethoscope },
             { to: '/relatorios', label: 'Relatórios', icon: BarChart3 },

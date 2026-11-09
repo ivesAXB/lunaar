@@ -356,3 +356,87 @@
     width: 100%;
   }
 }
+
+/* Unidade, horários de medicação, peso e documentos */
+.profile__base {
+  color: var(--ink);
+  font-weight: 600;
+}
+.record__times {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.record__times svg {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-4);
+}
+.record__times .link {
+  font-weight: 500;
+}
+.weight-form,
+.doc-form {
+  align-items: end;
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.weight-form__actions {
+  grid-column: span 6;
+}
+.doc-form__file {
+  padding-top: 7px;
+}
+.doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.doc {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.doc__icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--ink-3);
+}
+.doc__main {
+  flex: 1;
+  min-width: 0;
+}
+.doc__name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.doc__name:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--yellow);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.doc__meta {
+  margin: 2px 0 0;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.doc__actions {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}

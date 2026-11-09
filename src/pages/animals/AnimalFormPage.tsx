@@ -2,12 +2,12 @@ import { useCallback, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useData, useMe } from '@/data/store';
 import { inCare } from '@/data/selectors';
-import type { Animal, AnimalOrigin, AnimalStatus, Sex, Size, Species } from '@/data/types';
+import type { Animal, AnimalOrigin, AnimalStatus, Base, Sex, Size, Species } from '@/data/types';
 import { useToast } from '@/components/toast';
 import { Button, Choices, Field, PageHeader } from '@/components/ui';
 import { PhotoInput } from '@/components/PhotoInput';
 import { ErrorSummary, useForm } from '@/lib/useForm';
-import { ANIMAL_STATUS, ANIMAL_STATUS_ORDER, ORIGIN, SEX, SIZE, SPECIES } from '@/lib/labels';
+import { ANIMAL_STATUS, ANIMAL_STATUS_ORDER, BASE, ORIGIN, SEX, SIZE, SPECIES } from '@/lib/labels';
 import { todayIso } from '@/lib/format';
 import { NotFoundPage } from '../NotFoundPage';
 import { KennelPicker } from './KennelPicker';
@@ -16,6 +16,7 @@ import './animal-form.css';
 
 type FormValues = {
   photo: string;
+  base: Base;
   name: string;
   species: Species;
   sex: Sex;
@@ -53,10 +54,11 @@ const LABELS: Partial<Record<keyof FormValues, string>> = {
   lastVetVisit: 'Última consulta',
 };
 
-function toForm(a?: Animal, userId?: string): FormValues {
+function toForm(a?: Animal, userId?: string, base: Base = 'ong'): FormValues {
   const months = a?.ageApproxMonths;
   return {
     photo: a?.photo ?? '',
+    base: a?.base ?? base,
     name: a?.name ?? '',
     species: a?.species ?? 'cao',
     sex: a?.sex ?? 'femea',
@@ -87,7 +89,7 @@ const parseNum = (v: string) => (v.trim() === '' ? undefined : Number(v.replace(
 
 export function AnimalFormPage() {
   const { id } = useParams();
-  const { db, actions, ready } = useData();
+  const { db, all, actions, ready, base: baseFilter, setBase } = useData();
   const user = useMe();
   const navigate = useNavigate();
   const toast = useToast();
@@ -110,7 +112,7 @@ export function AnimalFormPage() {
     return e;
   }, []);
 
-  const form = useForm<FormValues>(toForm(existing, user?.id), validate);
+  const form = useForm<FormValues>(toForm(existing, user?.id, baseFilter === 'todas' ? 'ong' : baseFilter), validate);
   const v = form.values;
   const vet = db.users.find((u) => u.role === 'veterinaria' && u.active)?.name;
   const [vaccineRows, setVaccineRows] = useState<VaccineRow[]>(() =>
@@ -126,7 +128,7 @@ export function AnimalFormPage() {
 
   if (id && !existing) return ready ? <NotFoundPage what="Animal" back="/animais" /> : null;
 
-  const occupancy = (kennelId: string) => inCare(db).filter((a) => a.kennelId === kennelId && a.id !== existing?.id).length;
+  const occupancy = (kennelId: string) => inCare(all).filter((a) => a.kennelId === kennelId && a.id !== existing?.id).length;
 
   const changeVaccines = (rows: VaccineRow[]) => {
     setVaccineRows(rows);
@@ -154,6 +156,7 @@ export function AnimalFormPage() {
       const saved = await actions.saveAnimal({
         ...(existing ?? {}),
         id: existing?.id,
+        base: v.base,
         name: v.name.trim(),
         species: v.species,
         sex: v.sex,
@@ -178,7 +181,12 @@ export function AnimalFormPage() {
         lastVetVisit: v.lastVetVisit || undefined,
         vaccines: rowsToDrafts(vaccineRows),
       });
-      toast(existing ? 'Alterações salvas.' : `${saved.name} cadastrado(a) na LUNAAR.`);
+      // Cadastro numa unidade diferente da exibida: troca a unidade para o animal aparecer.
+      const switched = baseFilter !== 'todas' && saved.base !== baseFilter;
+      if (switched) setBase(saved.base);
+      toast(
+        (existing ? 'Alterações salvas.' : `${saved.name} cadastrado(a) na LUNAAR.`) + (switched ? ` Exibindo agora ${BASE[saved.base]}.` : ''),
+      );
       navigate(`/animais/${saved.id}`, { replace: true });
     } catch (err) {
       toast((err as Error).message || 'Não foi possível salvar.', 'error');
@@ -284,6 +292,16 @@ export function AnimalFormPage() {
             <p>Entrada, origem, onde está e quem acompanha.</p>
           </div>
           <div className="form-grid">
+            <Choices
+              legend="Unidade"
+              name="base"
+              value={v.base}
+              onChange={(b) => {
+                form.set('base', b);
+                form.set('kennelId', '');
+              }}
+              options={(Object.keys(BASE) as Base[]).map((b) => ({ value: b, label: BASE[b] }))}
+            />
             <Field label="Data de entrada" required error={form.errors.intakeDate} className="col-2" htmlFor="f-intakeDate">
               {(p) => <input {...p} {...form.bind('intakeDate')} type="date" className="input" max={todayIso()} />}
             </Field>
@@ -314,7 +332,8 @@ export function AnimalFormPage() {
             </Field>
             <p className="form-subhead">Onde está alojado</p>
             <KennelPicker
-              kennels={db.kennels}
+              key={v.base}
+              kennels={all.kennels.filter((k) => k.base === v.base)}
               value={v.kennelId}
               onChange={(kid) => form.set('kennelId', kid)}
               occupancy={occupancy}

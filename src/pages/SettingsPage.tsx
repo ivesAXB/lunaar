@@ -3,11 +3,11 @@ import { useSearchParams } from 'react-router-dom';
 import { Pencil, Plus, RotateCcw } from 'lucide-react';
 import { useData, useMe } from '@/data/store';
 import { inCare } from '@/data/selectors';
-import type { Accommodation, Kennel, KennelKind, User, UserRole } from '@/data/types';
+import type { Accommodation, Base, Kennel, KennelKind, User, UserRole } from '@/data/types';
 import { useToast } from '@/components/toast';
 import { Avatar, Button, ConfirmDialog, Dialog, Field, Notice, PageHeader, Tag } from '@/components/ui';
 import { fmtMoney, maskPhone } from '@/lib/format';
-import { KENNEL_KIND, ROLE } from '@/lib/labels';
+import { BASE, KENNEL_KIND, ROLE } from '@/lib/labels';
 import { isRemote } from '@/lib/supabase';
 import { compareKennels, kennelName, kennelPath, kennelShort, kennelTag, uniqueSorted } from '@/lib/kennel';
 
@@ -203,15 +203,17 @@ function UserDialog({ initial, onClose }: { initial: Partial<User>; onClose: () 
 }
 
 function KennelsTab() {
-  const { db } = useData();
+  const { db, base } = useData();
   const [editing, setEditing] = useState<Partial<Kennel> | null>(null);
   const care = inCare(db);
   const kennels = [...db.kennels].sort(compareKennels);
   return (
     <>
       <div className="settings-head">
-        <p className="muted">Onde os animais da ONG ficam: localização, setor, ala e número do canil.</p>
-        <Button variant="dark" icon={<Plus aria-hidden />} onClick={() => setEditing({ kind: 'canil', capacity: 4 })}>
+        <p className="muted">
+          Onde os animais ficam: localização, setor, ala e número do canil.{base !== 'todas' && ` Mostrando os canis de ${BASE[base]}.`}
+        </p>
+        <Button variant="dark" icon={<Plus aria-hidden />} onClick={() => setEditing({ kind: 'canil', capacity: 4, base: base === 'todas' ? 'ong' : base })}>
           Adicionar canil
         </Button>
       </div>
@@ -220,6 +222,7 @@ function KennelsTab() {
           <thead>
             <tr>
               <th scope="col">Canil</th>
+              <th scope="col">Unidade</th>
               <th scope="col">Localização</th>
               <th scope="col">Setor</th>
               <th scope="col">Ala</th>
@@ -243,6 +246,7 @@ function KennelsTab() {
                     <strong style={{ fontWeight: 600 }}>{kennelName(k)}</strong>
                     {k.notes && <div className="cell-primary__sub">{k.notes}</div>}
                   </td>
+                  <td data-label="Unidade">{BASE[k.base]}</td>
                   <td data-label="Localização">{k.location}</td>
                   <td data-label="Setor">{k.sector}</td>
                   <td data-label="Ala">{k.wing}</td>
@@ -266,7 +270,8 @@ function KennelsTab() {
 }
 
 function KennelDialog({ initial, onClose }: { initial: Partial<Kennel>; onClose: () => void }) {
-  const { actions, db } = useData();
+  const { actions, all: db } = useData();
+  const [base, setBase] = useState<Base>(initial.base ?? 'ong');
   const toast = useToast();
   const [location, setLocation] = useState(initial.location ?? '');
   const [sector, setSector] = useState(initial.sector ?? '');
@@ -294,6 +299,7 @@ function KennelDialog({ initial, onClose }: { initial: Partial<Kennel>; onClose:
     setBusy(true);
     await actions.saveKennel({
       id: initial.id,
+      base,
       location: location.trim(),
       sector: sector.trim(),
       wing: wing.trim().toUpperCase(),
@@ -328,7 +334,18 @@ function KennelDialog({ initial, onClose }: { initial: Partial<Kennel>; onClose:
       }
     >
       <form id="kennel-form" className="form-grid" onSubmit={submit} noValidate>
-        <Field label="Localização" required error={errors.location} className="col-3" hint="Unidade ou endereço.">
+        <Field label="Unidade" className="col-2">
+          {(p) => (
+            <select {...p} className="select" value={base} onChange={(e) => setBase(e.target.value as Base)}>
+              {(Object.keys(BASE) as Base[]).map((b) => (
+                <option key={b} value={b}>
+                  {BASE[b]}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Field label="Localização" required error={errors.location} className="col-4" hint="Prédio ou endereço.">
           {(p) => <input {...p} data-autofocus className="input" list="kn-locations" value={location} onChange={(e) => setLocation(e.target.value)} />}
         </Field>
         <Field label="Setor" required error={errors.sector} className="col-3">

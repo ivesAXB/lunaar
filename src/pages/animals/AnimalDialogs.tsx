@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import type { Animal, AnimalStatus, HealthRecordType, TreatmentStatus } from '@/data/types';
+import type { Animal, AnimalStatus, AnimalTreatment, HealthRecordType, TreatmentStatus } from '@/data/types';
 import { useData, useMe } from '@/data/store';
 import { useToast } from '@/components/toast';
 import { Button, Choices, Dialog, Field } from '@/components/ui';
@@ -31,6 +31,21 @@ function useSubmit(onClose: () => void) {
 }
 
 const vetName = (name?: string) => name ?? '';
+
+/** "8h, 20:00" → ["08:00", "20:00"]. null quando algum horário é inválido. */
+export function parseTimes(text: string): string[] | null {
+  const parts = text.split(/[,;\s]+/).map((p) => p.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const p of parts) {
+    const m = /^(\d{1,2})(?:[:h](\d{2})?)?h?$/i.exec(p);
+    if (!m) return null;
+    const h = Number(m[1]);
+    const min = Number(m[2] ?? 0);
+    if (h > 23 || min > 59) return null;
+    out.push(`${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`);
+  }
+  return [...new Set(out)].sort();
+}
 
 export function StatusDialog({ open, onClose, animal }: Base) {
   const { actions } = useData();
@@ -78,11 +93,25 @@ export function StatusDialog({ open, onClose, animal }: Base) {
   );
 }
 
-export function TreatmentDialog({ open, onClose, animal }: Base) {
+export function TreatmentDialog({ open, onClose, animal, treatment }: Base & { treatment?: AnimalTreatment }) {
   const { actions, db } = useData();
   const user = useMe();
   const vet = db.users.find((u) => u.role === 'veterinaria');
-  const [form, setForm] = useState({ title: '', medication: '', dosage: '', startDate: todayIso(), endDate: '', status: 'ativo' as TreatmentStatus, vet: vetName(vet?.name), notes: '' });
+  const [form, setForm] = useState(() =>
+    treatment
+      ? {
+          title: treatment.title,
+          medication: treatment.medication ?? '',
+          dosage: treatment.dosage ?? '',
+          times: treatment.times.join(', '),
+          startDate: treatment.startDate,
+          endDate: treatment.endDate ?? '',
+          status: treatment.status,
+          vet: treatment.vet ?? '',
+          notes: treatment.notes ?? '',
+        }
+      : { title: '', medication: '', dosage: '', times: '', startDate: todayIso(), endDate: '', status: 'ativo' as TreatmentStatus, vet: vetName(vet?.name), notes: '' },
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { busy, run } = useSubmit(onClose);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -92,22 +121,27 @@ export function TreatmentDialog({ open, onClose, animal }: Base) {
     const next: Record<string, string> = {};
     if (!form.title.trim()) next.title = 'Descreva o tratamento. Ex.: “Tratamento de sarna”.';
     if (form.endDate && form.endDate < form.startDate) next.endDate = 'O fim não pode ser antes do início.';
+    const times = parseTimes(form.times);
+    if (times === null) next.times = 'Use horários no formato 08:00, separados por vírgula.';
+    else if (times.length && !form.medication.trim()) next.medication = 'Informe o medicamento para montar a agenda de doses.';
     setErrors(next);
     if (Object.keys(next).length) return;
     run(
       () =>
         actions.saveTreatment({
+          id: treatment?.id,
           animalId: animal.id,
           title: form.title.trim(),
           medication: form.medication || undefined,
           dosage: form.dosage || undefined,
+          times: parseTimes(form.times) ?? [],
           startDate: form.startDate,
           endDate: form.endDate || undefined,
           status: form.status,
           vet: form.vet || user?.name,
           notes: form.notes || undefined,
         }),
-      'Tratamento registrado.',
+      treatment ? 'Tratamento atualizado.' : 'Tratamento registrado.',
     );
   };
 
@@ -117,7 +151,7 @@ export function TreatmentDialog({ open, onClose, animal }: Base) {
       onClose={onClose}
       busy={busy}
       wide
-      title="Novo tratamento"
+      title={treatment ? 'Editar tratamento' : 'Novo tratamento'}
       description={animal.name}
       footer={
         <>
@@ -125,7 +159,7 @@ export function TreatmentDialog({ open, onClose, animal }: Base) {
             Cancelar
           </Button>
           <Button variant="dark" type="submit" form="treatment-form" loading={busy}>
-            Registrar tratamento
+            {treatment ? 'Salvar alterações' : 'Registrar tratamento'}
           </Button>
         </>
       }
@@ -134,11 +168,19 @@ export function TreatmentDialog({ open, onClose, animal }: Base) {
         <Field label="Tratamento" required error={errors.title}>
           {(p) => <input {...p} data-autofocus className="input" value={form.title} onChange={set('title')} />}
         </Field>
-        <Field label="Medicamento" optional className="col-3">
+        <Field label="Medicamento" optional className="col-3" error={errors.medication}>
           {(p) => <input {...p} className="input" value={form.medication} onChange={set('medication')} placeholder="Ex.: Doxiciclina 100 mg" />}
         </Field>
         <Field label="Posologia" optional className="col-3">
-          {(p) => <input {...p} className="input" value={form.dosage} onChange={set('dosage')} placeholder="Ex.: a cada 12h" />}
+          {(p) => <input {...p} className="input" value={form.dosage} onChange={set('dosage')} placeholder="Ex.: 1 comprimido" />}
+        </Field>
+        <Field
+          label="Horários das doses"
+          optional
+          error={errors.times}
+          hint="Separados por vírgula, ex.: 08:00, 20:00. As doses aparecem na agenda de Medicamentos todos os dias do tratamento."
+        >
+          {(p) => <input {...p} className="input" inputMode="numeric" value={form.times} onChange={set('times')} placeholder="08:00, 20:00" />}
         </Field>
         <Field label="Início" required className="col-2 keep">
           {(p) => <input {...p} type="date" className="input" value={form.startDate} onChange={set('startDate')} />}
@@ -151,6 +193,7 @@ export function TreatmentDialog({ open, onClose, animal }: Base) {
             <select {...p} className="select" value={form.status} onChange={set('status')}>
               <option value="ativo">Em andamento</option>
               <option value="pendente">Pendente (a iniciar)</option>
+              {treatment && <option value="concluido">Concluído</option>}
             </select>
           )}
         </Field>

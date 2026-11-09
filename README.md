@@ -51,6 +51,17 @@ db/schema.sql  esquema PostgreSQL correspondente ao modelo
 
 Com as variáveis do Supabase, as ações de `src/data/store.tsx` alteram o estado em memória e `src/data/remote.ts` grava só a diferença nas tabelas (fotos vão para o Storage). Sem as variáveis, o app roda em **modo demonstração**, com dados de exemplo no navegador. É útil para desenvolver: `npm run dev` sem `.env.local`.
 
+## Módulos trazidos do ONG-Lunar-Site (nov/2026)
+
+- **ONG × Recanto**: seletor na barra superior. Animais, canis e tarefas pertencem a uma unidade (`base`); as telas mostram só a unidade escolhida (ou as duas, em "Todas"). O recorte é feito em `viewForBase` (`src/data/store.tsx`).
+- **Medicamentos** (`/medicamentos`): tratamentos com horários (`times`) geram a agenda de doses do dia; cada dose dada vira uma linha em `medication_doses`.
+- **Tarefas** (`/tarefas`): quadro A fazer / Em andamento / Concluídas, com responsável, prioridade e prazo.
+- **Alertas** (`/alertas` e sino no topo): os mesmos alertas do painel, mais doses atrasadas, tarefas atrasadas e perda de peso ≥ 10% em 30 dias. "Visto" fica no navegador de cada pessoa.
+- **Peso** (aba do animal): histórico em `animal_weights` com gráfico; o peso do cadastro acompanha a última pesagem.
+- **Documentos** (aba do animal): arquivos no bucket **privado** `documents`, abertos por link temporário.
+
+Banco: `supabase/migrations/20261108000000_modulos_ong.sql` (só adiciona colunas e tabelas).
+
 ## Design
 
 - Direção visual: "ficha de abrigo". Fundo de papel quente, tinta quase preta, e o amarelo LUNAAR usado como marca-texto e na ação principal.

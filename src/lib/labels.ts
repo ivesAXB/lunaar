@@ -9,6 +9,11 @@ import {
 } from 'lucide-react';
 import type {
   AnimalEventType,
+  Base,
+  DocumentKind,
+  TaskCategory,
+  TaskPriority,
+  TaskStatus,
   AnimalOrigin,
   AnimalStatus,
   BookingStatus,
@@ -106,3 +111,44 @@ export const CONDITION: Record<PetCondition, { label: string; tone: Tone }> = {
 };
 
 export const CHECKIN_ITEMS = ['Coleira', 'Guia', 'Ração', 'Cama', 'Brinquedo', 'Medicamentos', 'Caixa de transporte', 'Roupinha', 'Comedouro'];
+
+export const BASE: Record<Base, string> = { ong: 'ONG Lunaar', recanto: 'Recanto' };
+
+export const TASK_STATUS: Record<TaskStatus, { label: string; tone: Tone }> = {
+  pendente: { label: 'A fazer', tone: 'neutral' },
+  em_andamento: { label: 'Em andamento', tone: 'blue' },
+  concluida: { label: 'Concluída', tone: 'green' },
+};
+export const TASK_STATUS_ORDER: TaskStatus[] = ['pendente', 'em_andamento', 'concluida'];
+
+export const TASK_PRIORITY: Record<TaskPriority, { label: string; tone: Tone; rank: number }> = {
+  critica: { label: 'Crítica', tone: 'red', rank: 0 },
+  alta: { label: 'Alta', tone: 'orange', rank: 1 },
+  normal: { label: 'Normal', tone: 'neutral', rank: 2 },
+  baixa: { label: 'Baixa', tone: 'neutral', rank: 3 },
+};
+
+export const TASK_CATEGORY: Record<TaskCategory, string> = {
+  geral: 'Geral',
+  medicacao: 'Medicação',
+  exame: 'Exame',
+  higiene: 'Higiene',
+  monitoramento: 'Monitoramento',
+  alta: 'Alta / saída',
+};
+
+export const DOCUMENT_KIND: Record<DocumentKind, string> = {
+  exame: 'Exame',
+  receituario: 'Receituário',
+  laudo: 'Laudo',
+  termo: 'Termo',
+  foto: 'Foto',
+  documento: 'Documento',
+};
+
+export type DoseStatus = 'administrada' | 'pendente' | 'atrasada';
+export const DOSE_STATUS: Record<DoseStatus, { label: string; tone: Tone }> = {
+  administrada: { label: 'Administrada', tone: 'green' },
+  pendente: { label: 'Pendente', tone: 'blue' },
+  atrasada: { label: 'Atrasada', tone: 'red' },
+};
