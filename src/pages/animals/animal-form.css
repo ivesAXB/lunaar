@@ -1,0 +1,65 @@
+.form-subhead {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* ─── Histórico de vacinas ────────────────────────────────── */
+.vac-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.vac-rows {
+  width: 100%;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.vac-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  align-items: start;
+  padding: var(--sp-4) 0;
+  border-bottom: 1px solid var(--line);
+}
+.vac-row__n {
+  padding-top: 30px;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+/* Duas linhas por dose: vacina + datas; lote + responsável */
+.vac-row__fields {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+.vac-row__fields > .field {
+  grid-column: span 2;
+}
+.vac-row__fields > .field:nth-child(5) {
+  grid-column: span 4;
+}
+.vac-row__remove {
+  margin-top: 28px;
+}
+@media (max-width: 599px) {
+  .vac-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .vac-row__n {
+    display: none;
+  }
+  .vac-row__fields > .field {
+    grid-column: span 3 !important;
+  }
+  .vac-row__fields > .vac-row__name {
+    grid-column: span 6 !important;
+  }
+}

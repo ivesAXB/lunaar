@@ -1,0 +1,123 @@
+/*
+ * LUNAAR — Design tokens
+ *
+ * Direção: "ficha de abrigo". Papel quente, tinta quase preta e o amarelo
+ * LUNAAR usado como marca-texto, nunca como fundo de tudo. Estrutura por
+ * linhas finas e tipografia; sombras só em camadas flutuantes.
+ */
+:root {
+  /* Marca */
+  --yellow: #ffc72c;
+  --yellow-hover: #f4b800;
+  --yellow-soft: #fff4cf;
+  --yellow-ink: #7a5500; /* amarelo legível sobre fundo claro (AA) */
+  --brand-red: #c4161c;
+
+  /* Neutros (papel e tinta) */
+  --paper: #f7f5f0;
+  --surface: #ffffff;
+  --surface-sunken: #f0ede6;
+  --surface-hover: #f3f0e9;
+  --ink: #17150f;
+  --ink-2: #474338;
+  --ink-3: #6b665b;
+  --ink-4: #857f71; /* só para ícones, bordas e marcas (≥ 3:1) */
+  --line: #e4dfd4;
+  --line-strong: #cec7b8;
+  --field-border: #979183; /* contorno de campos: ≥ 3:1 sobre branco */
+
+  /* Navegação (faixa escura, como as artes da ONG) */
+  --nav-bg: #141310;
+  --nav-fg: #cfc9bb;
+  --nav-fg-strong: #ffffff;
+  --nav-muted: #8a8475;
+  --nav-hover: #22201b;
+  --nav-line: #2b2923;
+
+  /* Tons semânticos — pares texto/fundo com contraste ≥ 4.5:1 */
+  --tone-green-fg: #1b6a42;
+  --tone-green-bg: #e2f1e8;
+  --tone-green-dot: #2f9e62;
+  --tone-amber-fg: #7a5500;
+  --tone-amber-bg: #fff1c2;
+  --tone-amber-dot: #e0a400;
+  --tone-blue-fg: #1d518c;
+  --tone-blue-bg: #e3edf8;
+  --tone-blue-dot: #3b7bd0;
+  --tone-orange-fg: #9a470a;
+  --tone-orange-bg: #fce8d6;
+  --tone-orange-dot: #e07a26;
+  --tone-red-fg: #a3121a;
+  --tone-red-bg: #fbe3e1;
+  --tone-red-dot: #d42a30;
+  --tone-neutral-fg: #474338;
+  --tone-neutral-bg: #ece8e0;
+  --tone-neutral-dot: #8a8475;
+  --tone-ink-fg: #f7f5f0;
+  --tone-ink-bg: #23211c;
+  --tone-ink-dot: #ffc72c;
+
+  --success: var(--tone-green-fg);
+  --danger: var(--tone-red-fg);
+  --danger-solid: #b3161d;
+
+  /* Tipografia */
+  --font-display: 'Archivo', 'Arial Narrow', sans-serif;
+  --font-body: 'Figtree', system-ui, sans-serif;
+  --fs-xs: 0.75rem;   /* 12 */
+  --fs-sm: 0.8125rem; /* 13 */
+  --fs-md: 0.9375rem; /* 15 */
+  --fs-base: 1rem;    /* 16 */
+  --fs-lg: 1.125rem;  /* 18 */
+  --fs-xl: 1.375rem;  /* 22 */
+  --fs-2xl: 1.75rem;  /* 28 */
+  --fs-3xl: clamp(1.75rem, 1.2rem + 2vw, 2.5rem);
+
+  /* Espaçamento (base 4) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* Forma */
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 7px;
+  --r-lg: 10px;
+
+  --shadow-pop: 0 1px 2px rgb(23 21 15 / 0.06), 0 8px 24px -6px rgb(23 21 15 / 0.18);
+  --shadow-dialog: 0 24px 60px -12px rgb(23 21 15 / 0.35);
+
+  /* Movimento */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 320ms;
+
+  /* Camadas */
+  --z-sticky: 10;
+  --z-nav: 30;
+  --z-overlay: 50;
+  --z-toast: 70;
+
+  /* Layout */
+  --sidebar-w: 236px;
+  --topbar-h: 60px;
+  --bottomnav-h: 64px;
+  --content-max: 1320px;
+  --control-h: 40px;
+}
+
+@media (max-width: 899px) {
+  :root {
+    --control-h: 44px;
+    --topbar-h: 56px;
+  }
+}

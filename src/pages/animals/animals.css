@@ -1,0 +1,166 @@
+/* ─── Filtros ─────────────────────────────────────────────── */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: calc(var(--sp-2) * -1) 0 var(--sp-5);
+}
+.filter-select .select {
+  min-height: 34px;
+  width: auto;
+  max-width: 230px;
+  padding-left: 10px;
+  font-size: var(--fs-sm);
+  border-color: var(--line);
+  background-color: transparent;
+}
+.filter-select .select[data-active] {
+  border-color: var(--ink);
+  background-color: var(--surface);
+  font-weight: 600;
+}
+.toolbar__filters-btn {
+  display: none !important;
+}
+.toolbar__sort {
+  width: auto !important;
+  min-width: 0 !important;
+}
+.filters-sheet {
+  display: grid;
+  gap: var(--sp-3);
+}
+.filters-sheet .filter-select .select {
+  width: 100%;
+  max-width: none;
+  min-height: 44px;
+  font-size: 16px;
+  border-color: var(--line-strong);
+}
+
+@media (max-width: 1023px) {
+  .filter-row {
+    display: none;
+  }
+  .toolbar__filters-btn {
+    display: inline-flex !important;
+  }
+}
+@media (max-width: 599px) {
+  .toolbar__search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .toolbar__spacer {
+    display: none;
+  }
+  .toolbar__sort {
+    flex: 1;
+  }
+  .hide-sm {
+    display: none;
+  }
+}
+
+/* ─── Grade de cards ──────────────────────────────────────── */
+.animal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: var(--sp-8) var(--sp-5);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.animal-grid > li {
+  animation: card-in var(--dur-slow) var(--ease-out) both;
+}
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (max-width: 599px) {
+  .animal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-6) var(--sp-3);
+  }
+}
+
+.animal-card {
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+}
+.animal-card__photo {
+  width: 100%;
+  border-radius: var(--r-md);
+}
+.animal-card__photo img {
+  transition: transform 500ms var(--ease-out);
+}
+.animal-card:hover .animal-card__photo img {
+  transform: scale(1.035);
+}
+.animal-card:focus-visible {
+  outline: none;
+}
+.animal-card:focus-visible .animal-card__photo {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+.animal-card__body {
+  padding-top: var(--sp-3);
+}
+.animal-card__title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.animal-card__title h3 {
+  font-size: 1.1875rem;
+  font-weight: 800;
+  font-stretch: 112%;
+}
+.animal-card:hover .animal-card__title h3 {
+  text-decoration: underline;
+  text-decoration-color: var(--yellow);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 3px;
+}
+.animal-card__sex {
+  color: var(--ink-3);
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+.animal-card__meta {
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.animal-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.animal-card__days {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+@media (max-width: 599px) {
+  .animal-card__title h3 {
+    font-size: var(--fs-base);
+  }
+  .animal-card__foot {
+    flex-wrap: wrap;
+  }
+}
